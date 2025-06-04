@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Plus, Wallet2, Link, DollarSign, RefreshCw, ChevronDown, ArrowUpRight, Coins, Shield, Activity } from 'lucide-react';
-import CustomDropdown from '../components/CustomDropdown';
+import { Plus, Wallet2, Copy, Check, ArrowUpRight, Coins, X, DollarSign } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import CustomDropdown from '../components/CustomDropdown';
 
 interface Network {
   id: string;
@@ -10,36 +10,17 @@ interface Network {
   color: string;
 }
 
-interface Project {
-  id: string;
-  name: string;
-}
-
 interface Contract {
   id: string;
-  name: string;
-  address: string;
-  network: string;
-}
-
-interface WalletBalance {
-  network: string;
-  balance: number;
-  change24h: number;
-}
-
-interface ContractBalance {
-  contractId: string;
-  network: string;
+  network: Network;
+  token: string;
   balance: number;
 }
 
 interface Wallet {
   id: string;
   address: string;
-  projects: string[];
-  contracts: string[];
-  balances: WalletBalance[];
+  contracts: Contract[];
   lastActivity: Date;
   status: 'active' | 'inactive';
 }
@@ -52,28 +33,20 @@ const Wallets: React.FC = () => {
     { id: 'arbitrum', name: 'Arbitrum', symbol: 'ARB', color: '#28A0F0' }
   ];
 
-  const projects: Project[] = [
-    { id: '1', name: 'DD' },
-    { id: '2', name: 'XProject' },
-    { id: '3', name: 'CryptoFlow' }
-  ];
-
-  const contracts: Contract[] = [
-    { id: '1', name: 'Main Contract', address: '0x1234...5678', network: 'eth' },
-    { id: '2', name: 'BSC Contract', address: '0x8765...4321', network: 'bsc' },
-    { id: '3', name: 'Polygon Contract', address: '0xabcd...efgh', network: 'polygon' }
-  ];
+  const tokens = {
+    eth: [{ id: 'eth', name: 'ETH' }],
+    bsc: [{ id: 'bnb', name: 'BNB' }],
+    polygon: [{ id: 'matic', name: 'MATIC' }],
+    arbitrum: [{ id: 'arb', name: 'ARB' }]
+  };
 
   const [wallets, setWallets] = useState<Wallet[]>([
     {
       id: '1',
       address: '0x9876...5432',
-      projects: ['1', '2'],
-      contracts: ['1'],
-      balances: [
-        { network: 'eth', balance: 1.5, change24h: 0.2 },
-        { network: 'bsc', balance: 5.2, change24h: -0.5 },
-        { network: 'polygon', balance: 1000, change24h: 100 }
+      contracts: [
+        { id: '1', network: networks[0], token: 'ETH', balance: 1.5 },
+        { id: '2', network: networks[1], token: 'BNB', balance: 5.2 }
       ],
       lastActivity: new Date(),
       status: 'active'
@@ -81,12 +54,9 @@ const Wallets: React.FC = () => {
     {
       id: '2',
       address: '0x5432...9876',
-      projects: ['3'],
-      contracts: ['2', '3'],
-      balances: [
-        { network: 'eth', balance: 0.8, change24h: -0.1 },
-        { network: 'bsc', balance: 12.4, change24h: 1.2 },
-        { network: 'polygon', balance: 500, change24h: -50 }
+      contracts: [
+        { id: '3', network: networks[2], token: 'MATIC', balance: 1000 },
+        { id: '4', network: networks[3], token: 'ARB', balance: 50 }
       ],
       lastActivity: new Date(Date.now() - 86400000),
       status: 'inactive'
@@ -94,62 +64,89 @@ const Wallets: React.FC = () => {
   ]);
 
   const [showAddWallet, setShowAddWallet] = useState(false);
-  const [selectedWallet, setSelectedWallet] = useState<string | null>(null);
-  const [newWallet, setNewWallet] = useState({
-    address: '',
-    projects: [] as string[],
-    contracts: [] as string[]
+  const [selectedWallet, setSelectedWallet] = useState<Wallet | null>(null);
+  const [selectedContract, setSelectedContract] = useState<Contract | null>(null);
+  const [showAddContract, setShowAddContract] = useState(false);
+  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+  const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
+  const [newWallet, setNewWallet] = useState({ address: '' });
+  const [newContract, setNewContract] = useState({
+    network: '',
+    token: ''
+  });
+  const [withdrawalData, setWithdrawalData] = useState({
+    amount: '',
+    destinationAddress: ''
   });
 
-  const [selectedNetwork, setSelectedNetwork] = useState('eth');
-  const [withdrawAmount, setWithdrawAmount] = useState('');
-  const [isWithdrawing, setIsWithdrawing] = useState(false);
+  const handleCopyAddress = async (address: string) => {
+    await navigator.clipboard.writeText(address);
+    setCopiedAddress(address);
+    setTimeout(() => setCopiedAddress(null), 2000);
+  };
 
   const handleAddWallet = () => {
     if (newWallet.address) {
       const wallet: Wallet = {
         id: (wallets.length + 1).toString(),
         address: newWallet.address,
-        projects: newWallet.projects,
-        contracts: newWallet.contracts,
-        balances: networks.map(network => ({
-          network: network.id,
-          balance: 0,
-          change24h: 0
-        })),
+        contracts: [],
         lastActivity: new Date(),
         status: 'active'
       };
       setWallets(prev => [...prev, wallet]);
-      setNewWallet({ address: '', projects: [], contracts: [] });
+      setNewWallet({ address: '' });
       setShowAddWallet(false);
     }
   };
 
-  const handleWithdraw = async (contractId: string) => {
-    if (!withdrawAmount) return;
-    
-    setIsWithdrawing(true);
-    try {
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      console.log('Withdrawn', withdrawAmount, 'from contract', contractId, 'on network', selectedNetwork);
-    } finally {
-      setIsWithdrawing(false);
-      setWithdrawAmount('');
+  const handleAddContract = () => {
+    if (!selectedWallet || !newContract.network || !newContract.token) return;
+
+    const network = networks.find(n => n.id === newContract.network);
+    if (network) {
+      const newContractObj: Contract = {
+        id: Math.random().toString(),
+        network,
+        token: newContract.token,
+        balance: 0
+      };
+
+      setWallets(prev => prev.map(wallet => {
+        if (wallet.id === selectedWallet.id) {
+          return {
+            ...wallet,
+            contracts: [...wallet.contracts, newContractObj]
+          };
+        }
+        return wallet;
+      }));
+
+      setNewContract({ network: '', token: '' });
+      setShowAddContract(false);
     }
   };
 
-  const getTotalBalance = (network: string) => {
-    return wallets.reduce((total, wallet) => {
-      const balance = wallet.balances.find(b => b.network === network)?.balance || 0;
-      return total + balance;
-    }, 0);
+  const handleWithdraw = () => {
+    if (!selectedContract || !withdrawalData.amount || !withdrawalData.destinationAddress) return;
+
+    console.log('Withdrawing:', {
+      contract: selectedContract,
+      amount: withdrawalData.amount,
+      to: withdrawalData.destinationAddress
+    });
+
+    setWithdrawalData({ amount: '', destinationAddress: '' });
+    setShowWithdrawModal(false);
+    setSelectedContract(null);
   };
 
-  const getTotalChange24h = (network: string) => {
+  const getTotalBalance = (network: Network) => {
     return wallets.reduce((total, wallet) => {
-      const change = wallet.balances.find(b => b.network === network)?.change24h || 0;
-      return total + change;
+      const contractBalance = wallet.contracts
+        .filter(c => c.network.id === network.id)
+        .reduce((sum, contract) => sum + contract.balance, 0);
+      return total + contractBalance;
     }, 0);
   };
 
@@ -171,13 +168,10 @@ const Wallets: React.FC = () => {
         </motion.button>
       </div>
 
-      {/* Network Cards */}
+      {/* Network Overview */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {networks.map(network => {
-          const totalBalance = getTotalBalance(network.id);
-          const change24h = getTotalChange24h(network.id);
-          const isPositive = change24h >= 0;
-
+          const totalBalance = getTotalBalance(network);
           return (
             <motion.div
               key={network.id}
@@ -190,7 +184,6 @@ const Wallets: React.FC = () => {
                   background: `radial-gradient(circle at center, ${network.color}, transparent 70%)`
                 }}
               />
-              
               <div className="flex items-center gap-3 mb-3">
                 <div
                   className="w-8 h-8 rounded-full flex items-center justify-center"
@@ -200,20 +193,8 @@ const Wallets: React.FC = () => {
                 </div>
                 <span className="font-medium">{network.name}</span>
               </div>
-              
               <div className="text-2xl font-bold mb-2">
                 {totalBalance.toFixed(4)} {network.symbol}
-              </div>
-              
-              <div className={`flex items-center gap-1 text-sm ${
-                isPositive ? 'text-green-400' : 'text-red-400'
-              }`}>
-                <ArrowUpRight
-                  size={16}
-                  className={isPositive ? 'rotate-0' : 'rotate-90'}
-                />
-                {Math.abs(change24h).toFixed(2)} {network.symbol}
-                <span className="text-gray-400 ml-1">24h</span>
               </div>
             </motion.div>
           );
@@ -227,178 +208,27 @@ const Wallets: React.FC = () => {
           <h2 className="text-xl font-semibold">Your Wallets</h2>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-3">
           {wallets.map(wallet => (
-            <motion.div
+            <motion.button
               key={wallet.id}
-              initial={false}
-              animate={{ height: selectedWallet === wallet.id ? 'auto' : '80px' }}
-              className="bg-[#2a2b33] rounded-lg overflow-hidden"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => setSelectedWallet(wallet)}
+              className="w-full bg-[#2a2b33] p-4 rounded-lg text-left hover:bg-[#353640] transition-all duration-300 flex items-center justify-between group"
             >
-              {/* Wallet Header */}
-              <div
-                onClick={() => setSelectedWallet(
-                  selectedWallet === wallet.id ? null : wallet.id
-                )}
-                className="p-4 flex items-center justify-between cursor-pointer hover:bg-[#353640] transition-colors"
-              >
-                <div className="flex items-center gap-4">
-                  <div className={`w-2 h-2 rounded-full ${
-                    wallet.status === 'active' ? 'bg-green-400' : 'bg-gray-400'
-                  }`} />
-                  <span className="font-mono">{wallet.address}</span>
-                  <span className="text-sm text-gray-400">
-                    Last active: {wallet.lastActivity.toLocaleDateString()}
-                  </span>
-                </div>
-                <motion.div
-                  animate={{ rotate: selectedWallet === wallet.id ? 180 : 0 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <ChevronDown size={20} />
-                </motion.div>
+              <div className="flex items-center gap-4">
+                <div className={`w-2 h-2 rounded-full ${
+                  wallet.status === 'active' ? 'bg-green-400' : 'bg-gray-400'
+                }`} />
+                <span className="font-mono">{wallet.address}</span>
               </div>
-
-              {/* Wallet Details */}
-              <AnimatePresence>
-                {selectedWallet === wallet.id && (
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="p-4"
-                  >
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                      {wallet.balances.map(balance => {
-                        const network = networks.find(n => n.id === balance.network);
-                        return (
-                          <div
-                            key={balance.network}
-                            className="bg-[#1e1f25] p-3 rounded-lg"
-                          >
-                            <div className="flex items-center gap-2 mb-2">
-                              <div
-                                className="w-3 h-3 rounded-full"
-                                style={{ backgroundColor: network?.color }}
-                              />
-                              <span>{network?.name}</span>
-                            </div>
-                            <div className="text-lg font-bold">
-                              {balance.balance} {network?.symbol}
-                            </div>
-                            <div className={`text-sm ${
-                              balance.change24h >= 0 ? 'text-green-400' : 'text-red-400'
-                            }`}>
-                              {balance.change24h >= 0 ? '+' : ''}{balance.change24h} 24h
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="bg-[#1e1f25] p-4 rounded-lg">
-                        <h3 className="font-medium mb-2">Associated Projects</h3>
-                        <div className="flex flex-wrap gap-2">
-                          {wallet.projects.map(projectId => {
-                            const project = projects.find(p => p.id === projectId);
-                            return (
-                              <div
-                                key={projectId}
-                                className="bg-[#2a2b33] px-3 py-1 rounded-full text-sm"
-                              >
-                                {project?.name}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      <div className="bg-[#1e1f25] p-4 rounded-lg">
-                        <h3 className="font-medium mb-2">Connected Contracts</h3>
-                        <div className="flex flex-wrap gap-2">
-                          {wallet.contracts.map(contractId => {
-                            const contract = contracts.find(c => c.id === contractId);
-                            return (
-                              <div
-                                key={contractId}
-                                className="bg-[#2a2b33] px-3 py-1 rounded-full text-sm"
-                              >
-                                {contract?.name}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </motion.div>
-          ))}
-        </div>
-      </div>
-
-      {/* Contract Withdrawal */}
-      <div className="bg-[#1e1f25] rounded-lg p-6">
-        <div className="flex items-center gap-2 mb-6">
-          <DollarSign className="text-green-400" size={24} />
-          <h2 className="text-xl font-semibold">Contract Withdrawal</h2>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="w-full">
-            <label className="block text-sm font-medium text-gray-400 mb-2">
-              Contract
-            </label>
-            <CustomDropdown
-              options={contracts}
-              value={contracts[0]?.id || ''}
-              onChange={(value) => console.log('Selected contract:', value)}
-              placeholder="Select contract"
-            />
-          </div>
-
-          <div className="w-full">
-            <label className="block text-sm font-medium text-gray-400 mb-2">
-              Network
-            </label>
-            <CustomDropdown
-              options={networks}
-              value={selectedNetwork}
-              onChange={setSelectedNetwork}
-              placeholder="Select network"
-            />
-          </div>
-
-          <div className="w-full">
-            <label className="block text-sm font-medium text-gray-400 mb-2">
-              Amount
-            </label>
-            <div className="flex gap-2 w-full">
-              <input
-                type="number"
-                value={withdrawAmount}
-                onChange={(e) => setWithdrawAmount(e.target.value)}
-                placeholder="Enter amount"
-                className="w-full bg-[#2a2b33] border border-gray-700 rounded-lg py-2 px-4 text-white focus:outline-none focus:ring-1 focus:ring-green-500"
+              <ArrowUpRight 
+                size={20} 
+                className="opacity-0 group-hover:opacity-100 transition-opacity text-green-400"
               />
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => handleWithdraw(contracts[0]?.id)}
-                disabled={isWithdrawing || !withdrawAmount}
-                className="whitespace-nowrap flex items-center gap-2 px-4 py-2 bg-green-400 text-[#1e1f25] rounded-lg hover:bg-green-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isWithdrawing ? (
-                  <RefreshCw className="animate-spin\" size={20} />
-                ) : (
-                  <DollarSign size={20} />
-                )}
-                Withdraw
-              </motion.button>
-            </div>
-          </div>
+            </motion.button>
+          ))}
         </div>
       </div>
 
@@ -409,15 +239,25 @@ const Wallets: React.FC = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+            className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50"
+            onClick={() => setShowAddWallet(false)}
           >
             <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
+              initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-[#1e1f25] rounded-lg p-6 w-full max-w-md"
+              exit={{ scale: 0.95, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-[#1e1f25] rounded-lg p-6 w-full max-w-md m-4"
             >
-              <h2 className="text-xl font-semibold mb-4">Add New Wallet</h2>
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-bold">Add New Wallet</h2>
+                <button
+                  onClick={() => setShowAddWallet(false)}
+                  className="text-gray-400 hover:text-white"
+                >
+                  <X size={24} />
+                </button>
+              </div>
               
               <div className="space-y-4">
                 <div>
@@ -427,55 +267,276 @@ const Wallets: React.FC = () => {
                   <input
                     type="text"
                     value={newWallet.address}
-                    onChange={(e) => setNewWallet(prev => ({ ...prev, address: e.target.value }))}
+                    onChange={(e) => setNewWallet({ address: e.target.value })}
                     placeholder="Enter wallet address"
+                    className="w-full bg-[#2a2b33] border border-gray-700 rounded-lg py-2 px-4 text-white focus:outline-none focus:ring-1 focus:ring-green-500"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2">
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => setShowAddWallet(false)}
+                    className="px-4 py-2 bg-[#2a2b33] text-white rounded-lg hover:bg-[#353640] transition-colors"
+                  >
+                    Cancel
+                  </motion.button>
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={handleAddWallet}
+                    className="flex items-center gap-2 px-4 py-2 bg-green-400 text-[#1e1f25] rounded-lg hover:bg-green-500 transition-colors"
+                  >
+                    <Plus size={20} />
+                    Add Wallet
+                  </motion.button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* Wallet Details Modal */}
+        {selectedWallet && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50"
+            onClick={() => setSelectedWallet(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-[#1e1f25] rounded-lg p-6 w-full max-w-2xl m-4"
+            >
+              <div className="flex justify-between items-start mb-6">
+                <div>
+                  <h2 className="text-xl font-bold mb-2">Wallet Details</h2>
+                  <button
+                    onClick={() => handleCopyAddress(selectedWallet.address)}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-[#2a2b33] rounded-lg hover:bg-[#353640] transition-colors"
+                  >
+                    <span className="font-mono">{selectedWallet.address}</span>
+                    {copiedAddress === selectedWallet.address ? (
+                      <Check size={16} className="text-green-400" />
+                    ) : (
+                      <Copy size={16} />
+                    )}
+                  </button>
+                </div>
+                <button
+                  onClick={() => setSelectedWallet(null)}
+                  className="p-2 hover:bg-[#2a2b33] rounded-lg transition-colors"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-lg font-semibold">Contracts</h3>
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => setShowAddContract(true)}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-green-400 text-[#1e1f25] rounded-lg hover:bg-green-500 transition-colors"
+                  >
+                    <Plus size={16} />
+                    Add Contract
+                  </motion.button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {selectedWallet.contracts.map(contract => (
+                    <motion.button
+                      key={contract.id}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => {
+                        setSelectedContract(contract);
+                        setShowWithdrawModal(true);
+                      }}
+                      className="bg-[#2a2b33] p-4 rounded-lg text-left hover:bg-[#353640] transition-colors"
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        <div
+                          className="w-3 h-3 rounded-full"
+                          style={{ backgroundColor: contract.network.color }}
+                        />
+                        <span>{contract.network.name}</span>
+                      </div>
+                      <div className="text-lg font-bold">
+                        {contract.balance} {contract.token}
+                      </div>
+                    </motion.button>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* Add Contract Modal */}
+        {showAddContract && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50"
+            onClick={() => setShowAddContract(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-[#1e1f25] rounded-lg p-6 w-full max-w-md m-4"
+            >
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-bold">Add New Contract</h2>
+                <button
+                  onClick={() => setShowAddContract(false)}
+                  className="text-gray-400 hover:text-white"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">
+                    Network
+                  </label>
+                  <CustomDropdown
+                    options={networks}
+                    value={newContract.network}
+                    onChange={(value) => setNewContract(prev => ({ ...prev, network: value, token: '' }))}
+                    placeholder="Select network"
+                  />
+                </div>
+
+                {newContract.network && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">
+                      Token
+                    </label>
+                    <CustomDropdown
+                      options={tokens[newContract.network as keyof typeof tokens]}
+                      value={newContract.token}
+                      onChange={(value) => setNewContract(prev => ({ ...prev, token: value }))}
+                      placeholder="Select token"
+                    />
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-2">
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => setShowAddContract(false)}
+                    className="px-4 py-2 bg-[#2a2b33] text-white rounded-lg hover:bg-[#353640] transition-colors"
+                  >
+                    Cancel
+                  </motion.button>
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={handleAddContract}
+                    className="flex items-center gap-2 px-4 py-2 bg-green-400 text-[#1e1f25] rounded-lg hover:bg-green-500 transition-colors"
+                  >
+                    <Plus size={20} />
+                    Add Contract
+                  </motion.button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* Withdraw Modal */}
+        {showWithdrawModal && selectedContract && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50"
+            onClick={() => setShowWithdrawModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-[#1e1f25] rounded-lg p-6 w-full max-w-md m-4"
+            >
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-bold">Withdraw Funds</h2>
+                <button
+                  onClick={() => setShowWithdrawModal(false)}
+                  className="text-gray-400 hover:text-white"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div className="bg-[#2a2b33] p-4 rounded-lg">
+                  <div className="text-sm text-gray-400 mb-1">Available Balance</div>
+                  <div className="text-xl font-bold">
+                    {selectedContract.balance} {selectedContract.token}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">
+                    Amount to Withdraw
+                  </label>
+                  <input
+                    type="number"
+                    value={withdrawalData.amount}
+                    onChange={(e) => setWithdrawalData(prev => ({ ...prev, amount: e.target.value }))}
+                    placeholder="Enter amount"
                     className="w-full bg-[#2a2b33] border border-gray-700 rounded-lg py-2 px-4 text-white focus:outline-none focus:ring-1 focus:ring-green-500"
                   />
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-400 mb-2">
-                    Associated Projects
+                    Destination Address
                   </label>
-                  <CustomDropdown
-                    options={projects}
-                    value={newWallet.projects[0] || ''}
-                    onChange={(value) => setNewWallet(prev => ({ ...prev, projects: [value] }))}
-                    placeholder="Select projects"
+                  <input
+                    type="text"
+                    value={withdrawalData.destinationAddress}
+                    onChange={(e) => setWithdrawalData(prev => ({ ...prev, destinationAddress: e.target.value }))}
+                    placeholder="Enter destination wallet address"
+                    className="w-full bg-[#2a2b33] border border-gray-700 rounded-lg py-2 px-4 text-white focus:outline-none focus:ring-1 focus:ring-green-500"
                   />
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">
-                    Associated Contracts
-                  </label>
-                  <CustomDropdown
-                    options={contracts}
-                    value={newWallet.contracts[0] || ''}
-                    onChange={(value) => setNewWallet(prev => ({ ...prev, contracts: [value] }))}
-                    placeholder="Select contracts"
-                  />
+                <div className="flex justify-end gap-2">
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => setShowWithdrawModal(false)}
+                    className="px-4 py-2 bg-[#2a2b33] text-white rounded-lg hover:bg-[#353640] transition-colors"
+                  >
+                    Cancel
+                  </motion.button>
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={handleWithdraw}
+                    disabled={!withdrawalData.amount || !withdrawalData.destinationAddress}
+                    className="flex items-center gap-2 px-4 py-2 bg-green-400 text-[#1e1f25] rounded-lg hover:bg-green-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <DollarSign size={20} />
+                    Withdraw
+                  </motion.button>
                 </div>
-              </div>
-
-              <div className="flex justify-end gap-2 mt-6">
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => setShowAddWallet(false)}
-                  className="px-4 py-2 bg-[#2a2b33] text-white rounded-lg hover:bg-[#353640] transition-colors"
-                >
-                  Cancel
-                </motion.button>
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={handleAddWallet}
-                  className="flex items-center gap-2 px-4 py-2 bg-green-400 text-[#1e1f25] rounded-lg hover:bg-green-500 transition-colors"
-                >
-                  <Plus size={20} />
-                  Add Wallet
-                </motion.button>
               </div>
             </motion.div>
           </motion.div>

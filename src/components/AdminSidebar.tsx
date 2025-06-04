@@ -1,41 +1,37 @@
 import { Link, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, 
-  FolderKanban, 
-  Terminal, 
-  Database, 
-  Wallet,
-  BarChart3,
-  Settings
+  Users,
+  Package,
+  Settings,
+  ShieldAlert
 } from 'lucide-react';
 
-interface SidebarProps {
+interface AdminSidebarProps {
   closeSidebar: () => void;
 }
 
-const Sidebar = ({ closeSidebar }: SidebarProps) => {
+const AdminSidebar = ({ closeSidebar }: AdminSidebarProps) => {
   const location = useLocation();
-  const pathname = location.pathname === '/' ? '/dashboard' : location.pathname;
+  const pathname = location.pathname === '/admin' ? '/admin' : location.pathname;
 
   const isActive = (path: string) => {
     return pathname.includes(path);
   };
 
   const navItems = [
-    { name: 'Dashboard', path: '/dashboard', icon: <LayoutDashboard size={20} /> },
-    { name: 'Projects', path: '/projects', icon: <FolderKanban size={20} /> },
-    { name: 'Builder', path: '/builder', icon: <Terminal size={20} /> },
-    { name: 'Backup', path: '/backup', icon: <Database size={20} /> },
-    { name: 'Wallets', path: '/wallets', icon: <Wallet size={20} /> },
-    { name: 'Settings', path: '/settings', icon: <Settings size={20} /> },
+    { name: 'Dashboard', path: '/admin', icon: <LayoutDashboard size={20} /> },
+    { name: 'Users', path: '/admin/users', icon: <Users size={20} /> },
+    { name: 'Builds', path: '/admin/builds', icon: <Package size={20} /> },
+    { name: 'Settings', path: '/admin/settings', icon: <Settings size={20} /> },
   ];
 
   return (
     <div className="bg-[#121318] border-r border-gray-800 h-screen w-64 flex flex-col">
       <div className="p-6">
         <div className="flex items-center space-x-2">
-          <BarChart3 className="text-green-400" size={28} />
-          <h1 className="text-xl font-bold tracking-wider">MILLER DRAINER</h1>
+          <ShieldAlert className="text-red-400" size={28} />
+          <h1 className="text-xl font-bold tracking-wider">ADMIN PANEL</h1>
         </div>
       </div>
       
@@ -46,7 +42,7 @@ const Sidebar = ({ closeSidebar }: SidebarProps) => {
               <Link
                 to={item.path}
                 className={`flex items-center py-3 px-6 text-gray-300 hover:bg-gray-800 transition-colors ${
-                  isActive(item.path) ? 'bg-gray-800 border-l-4 border-green-400 text-green-400' : ''
+                  isActive(item.path) ? 'bg-gray-800 border-l-4 border-red-400 text-red-400' : ''
                 }`}
                 onClick={closeSidebar}
               >
@@ -59,10 +55,10 @@ const Sidebar = ({ closeSidebar }: SidebarProps) => {
       </nav>
       
       <div className="p-4 text-xs text-gray-500">
-        <p>© 2025 Miller Drainer</p>
+        <p>© 2025 Miller Drainer Admin</p>
       </div>
     </div>
   );
 };
 
-export default Sidebar;
+export default AdminSidebar;
