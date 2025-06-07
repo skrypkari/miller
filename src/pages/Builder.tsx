@@ -3,20 +3,26 @@ import { Code2, Shield, Hash, Key, Save, Download, Plus, Wallet, Search, Filter,
 import CustomDropdown from '../components/CustomDropdown';
 import { motion, AnimatePresence } from 'framer-motion';
 
+interface Network {
+  id: string;
+  name: string;
+  symbol: string;
+  color: string;
+}
+
+interface Contract {
+  id: string;
+  name: string;
+  address: string;
+  network: Network;
+  token: string; // USDT, USDC, etc.
+}
+
 interface Project {
   id: string;
   name: string;
-  wallet: string;
-  contracts: {
-    id: string;
-    name: string;
-    address: string;
-    network: {
-      name: string;
-      symbol: string;
-      color: string;
-    };
-  }[];
+  walletAddress: string; // Один кошелек на проект
+  contracts: Contract[]; // Контракты могут быть в разных сетях
 }
 
 interface Method {
@@ -40,55 +46,97 @@ interface Build {
 }
 
 const Builder: React.FC = () => {
+  // Sample networks
+  const networks: Network[] = [
+    { id: 'eth', name: 'Ethereum', symbol: 'ETH', color: '#627EEA' },
+    { id: 'bsc', name: 'BSC', symbol: 'BNB', color: '#F3BA2F' },
+    { id: 'polygon', name: 'Polygon', symbol: 'MATIC', color: '#8247E5' },
+    { id: 'arbitrum', name: 'Arbitrum', symbol: 'ARB', color: '#28A0F0' }
+  ];
+
+  // Теперь каждый проект может иметь контракты в разных сетях
   const projects: Project[] = [
     {
       id: '1',
       name: 'DD',
-      wallet: '0x1234...5678',
+      walletAddress: '0x1234...5678',
       contracts: [
         { 
           id: 'c1', 
-          name: 'Main Contract', 
+          name: 'USDT Contract (Ethereum)', 
           address: '0xabcd...1234',
-          network: { name: 'Ethereum', symbol: 'ETH', color: '#627EEA' }
+          network: networks[0], // Ethereum
+          token: 'USDT'
         },
         { 
           id: 'c2', 
-          name: 'Secondary Contract', 
+          name: 'USDC Contract (BSC)', 
           address: '0xefgh...5678',
-          network: { name: 'BSC', symbol: 'BNB', color: '#F3BA2F' }
+          network: networks[1], // BSC
+          token: 'USDC'
+        },
+        { 
+          id: 'c3', 
+          name: 'USDT Contract (Polygon)', 
+          address: '0xijkl...9012',
+          network: networks[2], // Polygon
+          token: 'USDT'
         }
       ]
     },
     {
       id: '2',
       name: 'XProject',
-      wallet: '0x8765...4321',
+      walletAddress: '0x8765...4321',
       contracts: [
         { 
-          id: 'c3', 
-          name: 'BSC Contract', 
-          address: '0xijkl...9012',
-          network: { name: 'BSC', symbol: 'BNB', color: '#F3BA2F' }
+          id: 'c4', 
+          name: 'USDC Contract (Ethereum)', 
+          address: '0xmnop...3456',
+          network: networks[0], // Ethereum
+          token: 'USDC'
+        },
+        { 
+          id: 'c5', 
+          name: 'USDT Contract (Arbitrum)', 
+          address: '0xqrst...7890',
+          network: networks[3], // Arbitrum
+          token: 'USDT'
         }
       ]
     },
     {
       id: '3',
       name: 'CryptoFlow',
-      wallet: '0xdef1...2345',
+      walletAddress: '0xdef1...2345',
       contracts: [
         { 
-          id: 'c4', 
-          name: 'Polygon Contract', 
-          address: '0xmnop...3456',
-          network: { name: 'Polygon', symbol: 'MATIC', color: '#8247E5' }
+          id: 'c6', 
+          name: 'USDT Contract (Ethereum)', 
+          address: '0xuvwx...1234',
+          network: networks[0], // Ethereum
+          token: 'USDT'
         },
         { 
-          id: 'c5', 
-          name: 'Secondary Contract', 
-          address: '0xqrst...7890',
-          network: { name: 'Arbitrum', symbol: 'ARB', color: '#28A0F0' }
+          id: 'c7', 
+          name: 'USDC Contract (BSC)', 
+          address: '0xyzab...5678',
+          network: networks[1], // BSC
+          token: 'USDC'
+        },
+        { 
+          id: 'c8', 
+          name: 'USDT Contract (Polygon)', 
+          address: '0xcdef...9012',
+          network: networks[2], // Polygon
+          token: 'USDT'
+        },
+        { 
+          id: 'c9', 
+          name: 'USDC Contract (Arbitrum)', 
+          address: '0xghij...3456',
+          network: networks[3], // Arbitrum
+          token: 'USDC'
         }
       ]
     }
@@ -142,7 +190,8 @@ const Builder: React.FC = () => {
 
   const filteredContracts = selectedProject?.contracts.filter(contract => {
     const matchesSearch = contract.name.toLowerCase().includes(contractSearch.toLowerCase()) ||
-                         contract.address.toLowerCase().includes(contractSearch.toLowerCase());
+                         contract.address.toLowerCase().includes(contractSearch.toLowerCase()) ||
+                         contract.token.toLowerCase().includes(contractSearch.toLowerCase());
     const matchesNetwork = !selectedNetwork || contract.network.name === selectedNetwork;
     return matchesSearch && matchesNetwork;
   }) || [];
@@ -335,7 +384,7 @@ const Builder: React.FC = () => {
                 <h2 className="text-xl font-semibold">Project Wallet</h2>
               </div>
               <div className="bg-[#2a2b33] p-4 rounded-lg">
-                <div className="font-mono">{selectedProject.wallet}</div>
+                <div className="font-mono">{selectedProject.walletAddress}</div>
               </div>
             </div>
           )}
@@ -416,12 +465,17 @@ const Builder: React.FC = () => {
                           {contract.address}
                         </div>
                         
-                        <div className="flex items-center gap-2 text-sm text-gray-400">
-                          <div
-                            className="w-2 h-2 rounded-full"
-                            style={{ backgroundColor: contract.network.color }}
-                          />
-                          Network: {contract.network.name}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 text-sm text-gray-400">
+                            <div
+                              className="w-2 h-2 rounded-full"
+                              style={{ backgroundColor: contract.network.color }}
+                            />
+                            Network: {contract.network.name}
+                          </div>
+                          <div className="text-sm font-medium">
+                            Token: {contract.token}
+                          </div>
                         </div>
                       </div>
                     </div>

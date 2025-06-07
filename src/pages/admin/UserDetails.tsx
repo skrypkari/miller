@@ -21,8 +21,6 @@ interface Network {
   name: string;
   symbol: string;
   color: string;
-  balance: number;
-  usdBalance: number;
 }
 
 interface Contract {
@@ -30,6 +28,7 @@ interface Contract {
   name: string;
   address: string;
   network: Network;
+  token: string; // USDT, USDC, etc.
   balance: number;
   usdBalance: number;
 }
@@ -38,8 +37,9 @@ interface ProjectUser {
   id: string;
   walletAddress: string;
   balance: {
-    token: string;
-    usd: number;
+    token: string; // USDT или USDC
+    amount: number; // количество токенов
+    usd: number; // USD стоимость
   };
   lastActivity: Date;
   status: 'active' | 'inactive';
@@ -48,11 +48,8 @@ interface ProjectUser {
 interface Project {
   id: string;
   name: string;
-  network: Network;
-  walletAddress: string;
-  balance: number;
-  usdBalance: number;
-  contracts: Contract[];
+  walletAddress: string; // Один кошелек на проект
+  contracts: Contract[]; // Контракты могут быть в разных сетях
   users: ProjectUser[];
   lastActivity: Date;
   status: 'active' | 'inactive';
@@ -84,39 +81,50 @@ const UserDetails = () => {
 
   // Sample networks for demonstration
   const networks: Network[] = [
-    { id: 'eth', name: 'Ethereum', symbol: 'ETH', color: '#627EEA', balance: 1.5, usdBalance: 5000 },
-    { id: 'bsc', name: 'BSC', symbol: 'BNB', color: '#F3BA2F', balance: 12, usdBalance: 3200 },
-    { id: 'matic', name: 'Polygon', symbol: 'MATIC', color: '#8247E5', balance: 2000, usdBalance: 1500 },
-    { id: 'arb', name: 'Arbitrum', symbol: 'ARB', color: '#28A0F0', balance: 150, usdBalance: 800 }
+    { id: 'eth', name: 'Ethereum', symbol: 'ETH', color: '#627EEA' },
+    { id: 'bsc', name: 'BSC', symbol: 'BNB', color: '#F3BA2F' },
+    { id: 'polygon', name: 'Polygon', symbol: 'MATIC', color: '#8247E5' },
+    { id: 'arbitrum', name: 'Arbitrum', symbol: 'ARB', color: '#28A0F0' }
   ];
 
-  // Generate sample projects
+  // Generate sample projects - теперь каждый проект может иметь контракты в разных сетях
   const generateProjects = (count: number): Project[] => {
     return Array.from({ length: count }, (_, i) => ({
       id: (i + 1).toString(),
       name: `Project ${i + 1}`,
-      network: networks[Math.floor(Math.random() * networks.length)],
       walletAddress: `0x${Math.random().toString(16).slice(2, 10)}...${Math.random().toString(16).slice(2, 6)}`,
-      balance: Math.random() * 10,
-      usdBalance: Math.random() * 20000,
-      contracts: Array.from({ length: Math.floor(Math.random() * 3) + 1 }, (_, j) => ({
-        id: `contract${j}`,
-        name: `Contract ${j + 1}`,
-        address: `0x${Math.random().toString(16).slice(2, 10)}...${Math.random().toString(16).slice(2, 6)}`,
-        network: networks[Math.floor(Math.random() * networks.length)],
-        balance: Math.random() * 5,
-        usdBalance: Math.random() * 10000
-      })),
-      users: Array.from({ length: Math.floor(Math.random() * 20) + 5 }, (_, k) => ({
-        id: `user${k}`,
-        walletAddress: `0x${Math.random().toString(16).slice(2, 10)}...${Math.random().toString(16).slice(2, 6)}`,
-        balance: {
-          token: 'ETH',
-          usd: Math.random() * 5000
-        },
-        lastActivity: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000),
-        status: Math.random() > 0.3 ? 'active' : 'inactive'
-      })),
+      contracts: Array.from({ length: Math.floor(Math.random() * 6) + 2 }, (_, j) => {
+        const network = networks[Math.floor(Math.random() * networks.length)];
+        const tokens = ['USDT', 'USDC'];
+        const token = tokens[Math.floor(Math.random() * tokens.length)];
+        return {
+          id: `contract${j}`,
+          name: `${token} Contract (${network.name})`,
+          address: `0x${Math.random().toString(16).slice(2, 10)}...${Math.random().toString(16).slice(2, 6)}`,
+          network,
+          token,
+          balance: Math.random() * 5,
+          usdBalance: Math.random() * 10000
+        };
+      }),
+      users: Array.from({ length: Math.floor(Math.random() * 20) + 5 }, (_, k) => {
+        const tokens = ['USDT', 'USDC'];
+        const userToken = tokens[Math.floor(Math.random() * tokens.length)];
+        const tokenAmount = Math.random() * 5000 + 100;
+        const usdValue = tokenAmount * (userToken === 'USDT' ? 1 : 0.999);
+        
+        return {
+          id: `user${k}`,
+          walletAddress: `0x${Math.random().toString(16).slice(2, 10)}...${Math.random().toString(16).slice(2, 6)}`,
+          balance: {
+            token: userToken,
+            amount: tokenAmount,
+            usd: usdValue
+          },
+          lastActivity: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000),
+          status: Math.random() > 0.3 ? 'active' : 'inactive'
+        };
+      }),
       lastActivity: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000),
       status: Math.random() > 0.3 ? 'active' : 'inactive'
     }));
@@ -181,7 +189,7 @@ const UserDetails = () => {
     },
     {
       title: 'Total Balance',
-      value: `$${projects.reduce((sum, p) => sum + p.usdBalance, 0).toLocaleString()}`,
+      value: `$${projects.reduce((sum, p) => sum + p.contracts.reduce((contractSum, c) => contractSum + c.usdBalance, 0), 0).toLocaleString()}`,
       icon: <Wallet size={20} />,
       color: '#f59e0b'
     },
@@ -463,25 +471,34 @@ const UserDetails = () => {
                   }`} />
                   <span className="font-bold">{project.name}</span>
                 </div>
-                <div
-                  className="w-6 h-6 rounded-full flex items-center justify-center"
-                  style={{ backgroundColor: `${project.network.color}20` }}
-                >
-                  <div
-                    className="w-3 h-3 rounded-full"
-                    style={{ backgroundColor: project.network.color }}
-                  />
+                <div className="flex gap-1">
+                  {/* Показываем иконки всех сетей, которые есть в контрактах проекта */}
+                  {Array.from(new Set(project.contracts.map(c => c.network.id))).map(networkId => {
+                    const network = networks.find(n => n.id === networkId);
+                    return network ? (
+                      <div
+                        key={networkId}
+                        className="w-6 h-6 rounded-full flex items-center justify-center"
+                        style={{ backgroundColor: `${network.color}20` }}
+                      >
+                        <div
+                          className="w-3 h-3 rounded-full"
+                          style={{ backgroundColor: network.color }}
+                        />
+                      </div>
+                    ) : null;
+                  })}
                 </div>
               </div>
 
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-400">Balance:</span>
-                  <span>{project.balance} {project.network.symbol}</span>
+                  <span className="text-gray-400">Contracts:</span>
+                  <span>{project.contracts.length}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-400">USD Value:</span>
-                  <span>${project.usdBalance.toLocaleString()}</span>
+                  <span className="text-gray-400">Total USD:</span>
+                  <span>${project.contracts.reduce((sum, c) => sum + c.usdBalance, 0).toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-400">Users:</span>
@@ -505,7 +522,7 @@ const UserDetails = () => {
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-2">
                 <Users className="text-red-400" size={24} />
-                <h2 className="text-xl font-semibold">{selectedProject.name} Users</h2>
+                <h2 className="text-xl font-semibold">{selectedProject.name} Details</h2>
               </div>
               
               <div className="relative">
@@ -520,35 +537,94 @@ const UserDetails = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {filteredUsers.map(user => (
-                <motion.button
-                  key={user.id}
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => setSelectedUser(user)}
-                  className="bg-[#2a2b33] p-4 rounded-lg text-left hover:bg-[#353640] transition-colors"
-                >
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <div className={`w-2 h-2 rounded-full ${
-                        user.status === 'active' ? 'bg-green-400' : 'bg-gray-400'
-                      }`} />
-                      <span className="font-mono">{user.walletAddress}</span>
+            {/* Project Wallet */}
+            <div className="bg-[#2a2b33] p-4 rounded-lg mb-6">
+              <div className="text-sm text-gray-400 mb-2">Project Wallet Address:</div>
+              <button
+                onClick={() => handleCopyAddress(selectedProject.walletAddress)}
+                className="flex items-center gap-2 px-3 py-1.5 bg-[#1e1f25] rounded-lg hover:bg-[#353640] transition-colors"
+              >
+                <span className="font-mono">{selectedProject.walletAddress}</span>
+                {copiedAddress === selectedProject.walletAddress ? (
+                  <Check size={16} className="text-red-400" />
+                ) : (
+                  <Copy size={16} />
+                )}
+              </button>
+            </div>
+
+            {/* Project Contracts */}
+            <div className="mb-6">
+              <h3 className="text-lg font-semibold mb-3">Contracts ({selectedProject.contracts.length})</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {selectedProject.contracts.map(contract => (
+                  <div
+                    key={contract.id}
+                    className="bg-[#2a2b33] p-4 rounded-lg"
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="w-3 h-3 rounded-full"
+                          style={{ backgroundColor: contract.network.color }}
+                        />
+                        <span className="font-medium">{contract.name}</span>
+                      </div>
+                      <div className="text-sm text-gray-400">{contract.token}</div>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="font-mono text-sm text-gray-400">{contract.address}</div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Balance:</span>
+                        <span>{contract.balance.toFixed(4)} {contract.token}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">USD Value:</span>
+                        <span>${contract.usdBalance.toLocaleString()}</span>
+                      </div>
                     </div>
                   </div>
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-400">Balance:</span>
-                      <span>${user.balance.usd.toLocaleString()}</span>
+                ))}
+              </div>
+            </div>
+
+            {/* Project Users */}
+            <div>
+              <h3 className="text-lg font-semibold mb-3">Users ({filteredUsers.length})</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {filteredUsers.map(user => (
+                  <motion.button
+                    key={user.id}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => setSelectedUser(user)}
+                    className="bg-[#2a2b33] p-4 rounded-lg text-left hover:bg-[#353640] transition-colors"
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-2 h-2 rounded-full ${
+                          user.status === 'active' ? 'bg-green-400' : 'bg-gray-400'
+                        }`} />
+                        <span className="font-mono">{user.walletAddress}</span>
+                      </div>
                     </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-400">Last Activity:</span>
-                      <span>{user.lastActivity.toLocaleDateString()}</span>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-400">Balance:</span>
+                        <span>{user.balance.amount.toFixed(2)} {user.balance.token}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-400">USD Value:</span>
+                        <span>${user.balance.usd.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-400">Last Activity:</span>
+                        <span>{user.lastActivity.toLocaleDateString()}</span>
+                      </div>
                     </div>
-                  </div>
-                </motion.button>
-              ))}
+                  </motion.button>
+                ))}
+              </div>
             </div>
           </motion.div>
         )}
@@ -605,7 +681,10 @@ const UserDetails = () => {
                 <div className="bg-[#2a2b33] p-4 rounded-lg">
                   <div className="text-gray-400 mb-1">Balance</div>
                   <div className="text-xl font-bold">
-                    ${selectedUser.balance.usd.toLocaleString()}
+                    {selectedUser.balance.amount.toFixed(2)} {selectedUser.balance.token}
+                  </div>
+                  <div className="text-sm text-gray-400">
+                    ≈ ${selectedUser.balance.usd.toLocaleString()}
                   </div>
                 </div>
                 <div className="bg-[#2a2b33] p-4 rounded-lg">

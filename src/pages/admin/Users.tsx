@@ -8,21 +8,6 @@ interface Network {
   name: string;
   symbol: string;
   color: string;
-  balance: number;
-  usdBalance: number;
-}
-
-interface Project {
-  id: string;
-  name: string;
-  network: Network;
-  walletAddress: string;
-  balance: number;
-  usdBalance: number;
-  contracts: Contract[];
-  users: ProjectUser[];
-  lastActivity: Date;
-  status: 'active' | 'inactive';
 }
 
 interface Contract {
@@ -30,6 +15,7 @@ interface Contract {
   name: string;
   address: string;
   network: Network;
+  token: string; // USDT, USDC, etc.
   balance: number;
   usdBalance: number;
 }
@@ -38,9 +24,20 @@ interface ProjectUser {
   id: string;
   walletAddress: string;
   balance: {
-    token: string;
-    usd: number;
+    token: string; // USDT или USDC
+    amount: number; // количество токенов
+    usd: number; // USD стоимость
   };
+  lastActivity: Date;
+  status: 'active' | 'inactive';
+}
+
+interface Project {
+  id: string;
+  name: string;
+  walletAddress: string; // Один кошелек на проект
+  contracts: Contract[]; // Контракты могут быть в разных сетях
+  users: ProjectUser[];
   lastActivity: Date;
   status: 'active' | 'inactive';
 }
@@ -70,14 +67,16 @@ const AdminUsers = () => {
   const [page, setPage] = useState(1);
   const usersPerPage = 9;
 
+  // Sample networks
+  const networks: Network[] = [
+    { id: 'eth', name: 'Ethereum', symbol: 'ETH', color: '#627EEA' },
+    { id: 'bsc', name: 'BSC', symbol: 'BNB', color: '#F3BA2F' },
+    { id: 'polygon', name: 'Polygon', symbol: 'MATIC', color: '#8247E5' },
+    { id: 'arbitrum', name: 'Arbitrum', symbol: 'ARB', color: '#28A0F0' }
+  ];
+
   // Generate sample users
   const generateUsers = (count: number): User[] => {
-    const networks: Network[] = [
-      { id: 'eth', name: 'Ethereum', symbol: 'ETH', color: '#627EEA', balance: 0, usdBalance: 0 },
-      { id: 'bsc', name: 'BSC', symbol: 'BNB', color: '#F3BA2F', balance: 0, usdBalance: 0 },
-      { id: 'polygon', name: 'Polygon', symbol: 'MATIC', color: '#8247E5', balance: 0, usdBalance: 0 }
-    ];
-
     return Array.from({ length: count }, (_, i) => ({
       id: `user${i + 1}`,
       username: `user${i + 1}`,
@@ -88,28 +87,39 @@ const AdminUsers = () => {
       projects: Array.from({ length: Math.floor(Math.random() * 5) + 1 }, (_, j) => ({
         id: `project${j}`,
         name: `Project ${j + 1}`,
-        network: networks[Math.floor(Math.random() * networks.length)],
         walletAddress: `0x${Math.random().toString(16).slice(2, 10)}...${Math.random().toString(16).slice(2, 6)}`,
-        balance: Math.random() * 10,
-        usdBalance: Math.random() * 20000,
-        contracts: Array.from({ length: Math.floor(Math.random() * 3) + 1 }, (_, k) => ({
-          id: `contract${k}`,
-          name: `Contract ${k + 1}`,
-          address: `0x${Math.random().toString(16).slice(2, 10)}...${Math.random().toString(16).slice(2, 6)}`,
-          network: networks[Math.floor(Math.random() * networks.length)],
-          balance: Math.random() * 5,
-          usdBalance: Math.random() * 10000
-        })),
-        users: Array.from({ length: Math.floor(Math.random() * 5) + 1 }, (_, l) => ({
-          id: `projectUser${l}`,
-          walletAddress: `0x${Math.random().toString(16).slice(2, 10)}...${Math.random().toString(16).slice(2, 6)}`,
-          balance: {
-            token: 'ETH',
-            usd: Math.random() * 5000
-          },
-          lastActivity: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000),
-          status: Math.random() > 0.3 ? 'active' : 'inactive'
-        })),
+        contracts: Array.from({ length: Math.floor(Math.random() * 6) + 2 }, (_, k) => {
+          const network = networks[Math.floor(Math.random() * networks.length)];
+          const tokens = ['USDT', 'USDC'];
+          const token = tokens[Math.floor(Math.random() * tokens.length)];
+          return {
+            id: `contract${k}`,
+            name: `${token} Contract (${network.name})`,
+            address: `0x${Math.random().toString(16).slice(2, 10)}...${Math.random().toString(16).slice(2, 6)}`,
+            network,
+            token,
+            balance: Math.random() * 5,
+            usdBalance: Math.random() * 10000
+          };
+        }),
+        users: Array.from({ length: Math.floor(Math.random() * 5) + 1 }, (_, l) => {
+          const tokens = ['USDT', 'USDC'];
+          const userToken = tokens[Math.floor(Math.random() * tokens.length)];
+          const tokenAmount = Math.random() * 5000 + 100;
+          const usdValue = tokenAmount * (userToken === 'USDT' ? 1 : 0.999);
+          
+          return {
+            id: `projectUser${l}`,
+            walletAddress: `0x${Math.random().toString(16).slice(2, 10)}...${Math.random().toString(16).slice(2, 6)}`,
+            balance: {
+              token: userToken,
+              amount: tokenAmount,
+              usd: usdValue
+            },
+            lastActivity: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000),
+            status: Math.random() > 0.3 ? 'active' : 'inactive'
+          };
+        }),
         lastActivity: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000),
         status: Math.random() > 0.3 ? 'active' : 'inactive'
       })),
@@ -433,28 +443,33 @@ const AdminUsers = () => {
                         }`} />
                         <span className="font-bold">{project.name}</span>
                       </div>
-                      <div
-                        className="w-6 h-6 rounded-full flex items-center justify-center"
-                        style={{ backgroundColor: `${project.network.color}20` }}
-                      >
-                        <div
-                          className="w-3 h-3 rounded-full"
-                          style={{ backgroundColor: project.network.color }}
-                        />
+                      <div className="flex gap-1">
+                        {/* Показываем иконки всех сетей, которые есть в контрактах проекта */}
+                        {Array.from(new Set(project.contracts.map(c => c.network.id))).map(networkId => {
+                          const network = networks.find(n => n.id === networkId);
+                          return network ? (
+                            <div
+                              key={networkId}
+                              className="w-6 h-6 rounded-full flex items-center justify-center"
+                              style={{ backgroundColor: `${network.color}20` }}
+                            >
+                              <div
+                                className="w-3 h-3 rounded-full"
+                                style={{ backgroundColor: network.color }}
+                              />
+                            </div>
+                          ) : null;
+                        })}
                       </div>
                     </div>
                     <div className="space-y-2">
                       <div className="flex justify-between text-sm">
-                        <span className="text-gray-400">Balance:</span>
-                        <span>{project.balance} {project.network.symbol}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-400">USD Value:</span>
-                        <span>${project.usdBalance.toLocaleString()}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
                         <span className="text-gray-400">Contracts:</span>
                         <span>{project.contracts.length}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-400">Total USD:</span>
+                        <span>${project.contracts.reduce((sum, c) => sum + c.usdBalance, 0).toLocaleString()}</span>
                       </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-400">Users:</span>
@@ -478,13 +493,8 @@ const AdminUsers = () => {
                   <div className="flex justify-between items-start mb-6">
                     <div>
                       <h3 className="text-lg font-semibold mb-2">{selectedProject.name} Details</h3>
-                      <div className="flex items-center gap-2 text-sm text-gray-400">
-                        <div
-                          className="w-3 h-3 rounded-full"
-                          style={{ backgroundColor: selectedProject.network.color }}
-                        />
-                        <span>{selectedProject.network.name}</span>
-                      </div>
+                      <div className="text-sm text-gray-400 mb-2">Project Wallet:</div>
+                      <div className="font-mono text-sm">{selectedProject.walletAddress}</div>
                     </div>
                     <button
                       onClick={() => setSelectedProject(null)}
@@ -497,12 +507,9 @@ const AdminUsers = () => {
                   {/* Project Stats */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                     <div className="bg-[#1e1f25] p-4 rounded-lg">
-                      <div className="text-sm text-gray-400 mb-1">Balance</div>
+                      <div className="text-sm text-gray-400 mb-1">Total Balance</div>
                       <div className="text-lg font-bold">
-                        {selectedProject.balance} {selectedProject.network.symbol}
-                      </div>
-                      <div className="text-sm text-gray-400">
-                        ${selectedProject.usdBalance.toLocaleString()}
+                        ${selectedProject.contracts.reduce((sum, c) => sum + c.usdBalance, 0).toLocaleString()}
                       </div>
                     </div>
                     <div className="bg-[#1e1f25] p-4 rounded-lg">
@@ -525,12 +532,19 @@ const AdminUsers = () => {
                           className="bg-[#1e1f25] p-3 rounded-lg flex items-center justify-between"
                         >
                           <div>
-                            <div className="font-medium mb-1">{contract.name}</div>
+                            <div className="flex items-center gap-2 mb-1">
+                              <div
+                                className="w-3 h-3 rounded-full"
+                                style={{ backgroundColor: contract.network.color }}
+                              />
+                              <span className="font-medium">{contract.name}</span>
+                              <span className="text-sm text-gray-400">({contract.token})</span>
+                            </div>
                             <div className="font-mono text-sm text-gray-400">{contract.address}</div>
                           </div>
                           <div className="text-right">
                             <div className="font-bold">
-                              {contract.balance} {contract.network.symbol}
+                              {contract.balance.toFixed(4)} {contract.token}
                             </div>
                             <div className="text-sm text-gray-400">
                               ${contract.usdBalance.toLocaleString()}
@@ -557,7 +571,12 @@ const AdminUsers = () => {
                             </div>
                           </div>
                           <div className="text-right">
-                            <div className="font-bold">${user.balance.usd.toLocaleString()}</div>
+                            <div className="font-bold">
+                              {user.balance.amount.toFixed(2)} {user.balance.token}
+                            </div>
+                            <div className="text-sm text-gray-400">
+                              ${user.balance.usd.toLocaleString()}
+                            </div>
                             <div className={`text-sm ${
                               user.status === 'active' ? 'text-green-400' : 'text-gray-400'
                             }`}>
